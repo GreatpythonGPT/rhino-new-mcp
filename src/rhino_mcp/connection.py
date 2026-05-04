@@ -38,6 +38,7 @@ class RhinoConnection:
         self._connected = False
         self._heartbeat_task: asyncio.Task | None = None
         self._connect_lock = asyncio.Lock()
+        self._io_lock = asyncio.Lock()
         self.last_command_at: float | None = None
         self.connected_at: float | None = None
 
@@ -96,19 +97,20 @@ class RhinoConnection:
         if not self.connected:
             await self.connect()
 
-        payload = request.model_dump_json().encode("utf-8")
-        header = len(payload).to_bytes(HEADER_SIZE, "big")
+        async with self._io_lock:
+            payload = request.model_dump_json().encode("utf-8")
+            header = len(payload).to_bytes(HEADER_SIZE, "big")
 
-        try:
-            assert self._writer is not None
-            self._writer.write(header + payload)
-            await self._writer.drain()
-            self.last_command_at = time.time()
-        except (ConnectionResetError, BrokenPipeError, OSError) as e:
-            self._connected = False
-            raise RhinoConnectionError(f"Send failed: {e}")
+            try:
+                assert self._writer is not None
+                self._writer.write(header + payload)
+                await self._writer.drain()
+                self.last_command_at = time.time()
+            except (ConnectionResetError, BrokenPipeError, OSError) as e:
+                self._connected = False
+                raise RhinoConnectionError(f"Send failed: {e}")
 
-        return await self._receive_response(request)
+            return await self._receive_response(request)
 
     async def _receive_response(self, request: RhinoRequest) -> RhinoResponse:
         timeout = request.payload.get("timeout", 30)
