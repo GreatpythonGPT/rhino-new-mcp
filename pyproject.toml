@@ -33,7 +33,9 @@ packages = ["src/rhino_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
+markers = [
+    "asyncio: async tests executed with pytest-asyncio or tests/conftest.py fallback",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true

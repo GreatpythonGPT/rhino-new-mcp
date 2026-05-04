@@ -95,3 +95,24 @@ async def test_multiple_requests():
 
         await conn.disconnect()
         assert len(received) == 3
+
+
+@pytest.mark.asyncio
+async def test_parallel_requests_are_serialized():
+    """Concurrent requests share one socket safely without response corruption."""
+    server, received = await start_fake_server(port=19880)
+    async with server:
+        conn = RhinoConnection(host="localhost", port=19880)
+        await conn.connect()
+
+        async def send_one(i: int):
+            req = RhinoRequest(
+                type=MessageType.EXECUTE_COMMAND,
+                payload={"code": f"print({i})", "timeout": 5},
+            )
+            resp = await conn.send_request(req)
+            assert resp.status == RequestStatus.SUCCESS
+
+        await asyncio.gather(*(send_one(i) for i in range(10)))
+        await conn.disconnect()
+        assert len(received) == 10
